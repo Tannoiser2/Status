@@ -2,6 +2,17 @@ extends Control
 ## Radice dell'applicazione: alterna menu e partita.
 
 var current: Control
+## Collegamento a Firebase per il gioco online (resta vivo fra menu e partita).
+var net: Net
+## Stanza online in preparazione: {role, code, seat}. Vuota se non si è in una stanza.
+var lobby := {}
+
+
+func get_net() -> Net:
+	if net == null:
+		net = Net.new()
+		add_child(net)
+	return net
 
 
 func _ready() -> void:

@@ -39,12 +39,16 @@ var pending: Dictionary = {}
 var tutorial := false
 var hints_shown := {}
 var paused := false
+## Partita online in corso (OnlineSession), null se si gioca sul dispositivo.
+var online = null
+var online_lbl: Label
 
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	tutorial = config.get("tutorial", false)
 	reveal = config.get("reveal", false)
+	online = config.get("online", null)
 	size = Vector2(1920, 1080)
 	var bg := ColorRect.new()
 	bg.color = Color("#0d0d0d")
@@ -58,9 +62,19 @@ func _ready() -> void:
 	add_child(engine)
 	engine.setup(config)
 	engine.ai_delay = config.get("ai_delay", 0.55)
-	for p in engine.players:
-		if not p["ai"]:
-			humans.append(p["seat"])
+	if online != null:
+		# online: su questo dispositivo si vede e si gioca solo la propria fazione
+		reveal = false
+		humans = [online.seat]
+		online.view = self
+		add_child(online)
+		engine.online = online
+		if online.role != "host":
+			online.heartbeat_loop()
+	else:
+		for p in engine.players:
+			if not p["ai"]:
+				humans.append(p["seat"])
 	viewer = humans[0] if humans.size() > 0 else -1
 	engine.pause_enabled = humans.size() > 0
 	engine.changed.connect(refresh)
@@ -72,6 +86,10 @@ func _ready() -> void:
 	engine.fx.connect(_on_fx)
 	_build_faction_rows()
 	refresh()
+	if online != null:
+		_build_online_label()
+		if online.catchup:
+			online_status("Riprendo la partita dal punto in cui era…")
 	if humans.size() > 1:
 		_curtain(viewer, func(): engine.run())
 	else:
@@ -902,6 +920,9 @@ func _curtain(seat: int, then: Callable) -> void:
 
 
 func _on_game_end(results: Array) -> void:
+	if online != null:
+		online.finish()
+		online_status("")
 	viewer = -1 if humans.is_empty() else viewer
 	reveal = true
 	refresh()
@@ -1141,3 +1162,49 @@ func _hint(id: String) -> void:
 	hint_panel.reset_size()
 	await get_tree().process_frame
 	hint_panel.position = Vector2(1604, 1012 - hint_panel.size.y)
+
+
+# =================================================================== online
+
+func _build_online_label() -> void:
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", UI.panel_style(Color("#000000cc"), UI.YELLOW, 2, 8))
+	p.position = Vector2(20, 1020)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	online_lbl = UI.label("", 22, Color.WHITE)
+	p.add_child(online_lbl)
+	add_child(p)
+	p.visible = false
+	online_lbl.set_meta("box", p)
+
+
+## Messaggio in basso a sinistra (vuoto = nascosto).
+func online_status(t: String) -> void:
+	if online_lbl == null:
+		return
+	online_lbl.text = t
+	(online_lbl.get_meta("box") as Control).visible = t != ""
+
+
+func online_waiting(seat: int, is_slow: bool) -> void:
+	if seat < 0:
+		online_status("")
+		return
+	var t := "Online · stanza %s · tocca a %s" % [online.code, engine.pname(seat)]
+	if is_slow:
+		t += " (sta pensando da più di un minuto)"
+	online_status(t)
+
+
+func online_caught_up() -> void:
+	online_status("")
+	refresh()
+
+
+## L'IA ha già giocato al posto di questo giocatore: si chiude il dialogo aperto.
+func online_cancel_decision(t: String) -> void:
+	pending = {}
+	banner.visible = false
+	_clear_overlay()
+	refresh()
+	online_status(t)

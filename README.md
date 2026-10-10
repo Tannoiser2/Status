@@ -19,6 +19,35 @@ Componenti e regole © dei rispettivi autori: non distribuire pubblicamente gli 
   Mano Invisibile, IA facile, carte per la prima partita) con suggerimenti a ogni fase.
 - **Regole rapide** consultabili dal menu e in partita (pulsante REGOLE).
 
+## Gioco online
+Dal menu, **GIOCA ONLINE** (anche dalla versione web su GitHub Pages:
+https://tannoiser2.github.io/Status/). Usa lo stesso progetto Firebase di Ultimo chilometro e
+Snow Tails (Realtime Database, piano gratuito), con le stanze sotto `status/rooms`.
+
+- **Chi crea la stanza** sceglie nel menu fazioni e opzioni: le fazioni su UMANO diventano i posti per
+  gli amici (la prima è la sua). Scrive il nome, preme *Crea una stanza* e comunica il codice di 4
+  lettere. Quando ci sono tutti preme *Inizia online*: i posti rimasti liberi li gioca l'IA.
+- **Gli amici** scrivono il nome e il codice e premono *Entra*.
+- Ognuno vede solo il proprio schermo: Asset e Funzionari coperti degli altri restano nascosti.
+  Le fazioni IA le gioca il dispositivo di chi ha creato la stanza, che deve restare collegato.
+- **Come funziona.** Ogni decisione del motore (dove inviare un Funzionario, le scelte, la ripartizione
+  degli Asset) è una mossa numerata nel database (`acts/0`, `acts/1`, …). Tutti i dispositivi fanno
+  girare lo stesso motore con lo stesso seme e applicano le stesse mosse nello stesso ordine, quindi
+  la partita è identica ovunque: sul database passano solo le scelte.
+- **Se cade la linea** si rientra con lo stesso codice e *Entra*: il gioco recupera le mosse già
+  giocate e riprende. Se un giocatore tace per un minuto, al suo posto gioca l'IA finché non rientra.
+- Nota: come in ogni gioco online fra amici senza server, i dati nascosti sono nascosti dall'interfaccia,
+  non dalla rete: chi volesse barare leggendo la memoria del gioco potrebbe farlo.
+
+**Configurazione Firebase.** Le regole sono in `firebase/database.rules.json` e comprendono anche
+quelle di Ultimo chilometro e Snow Tails: vanno pubblicate nella console di Firebase
+(Realtime Database → Regole) al posto delle precedenti.
+
+**Prove senza Firebase.** `tests/firebase_mock.py` è un finto Firebase locale. Con `SS_DB_URL`,
+`SS_AUTH_URL` e `SS_REFRESH_URL` che puntano lì, `tests/online_play.gd` fa giocare una partita
+intera a due istanze (`SS_ROLE=host` e `guest`, più una fazione IA; con `SS_PHASE=drop` e poi `back`
+l'ospite esce a metà e rientra). Alla fine ognuna stampa l'impronta della partita, che deve coincidere.
+
 ## Comandi
 - Clic su uno spazio evidenziato per inviare il Funzionario; passa il mouse per leggere costo,
   guadagno ed effetto.

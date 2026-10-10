@@ -109,6 +109,15 @@ func _ready() -> void:
 	b_quit.pressed.connect(func(): get_tree().quit())
 	btns.add_child(b_quit)
 
+	var b_online := _big_button("GIOCA ONLINE", 300)
+	b_online.add_theme_font_size_override("font_size", 34)
+	b_online.custom_minimum_size = Vector2(300, 64)
+	b_online.position = Vector2(1590, 22)
+	b_online.pressed.connect(_online_panel)
+	add_child(b_online)
+	if not main.lobby.is_empty():
+		_online_panel.call_deferred()
+
 	var credits := UI.label("Adattamento digitale non ufficiale per uso personale · STATUS di Paolo Mori, illustrazioni di Alan D'Amico · © Nova Lectio / MS Edizioni · F11 schermo intero / finestra", 17, Color("#8a8a8a"))
 	credits.position = Vector2(x0, 1040)
 	add_child(credits)
@@ -239,6 +248,19 @@ func _big_button(text: String, w: float, primary := false) -> Button:
 	return b
 
 
+## Configurazione della partita scelta nel menu (anche quella che, online, viaggia agli altri).
+func _config() -> Dictionary:
+	var seats := []
+	for f in GameEngine.FACTIONS:
+		var m: int = seat_mode[f["id"]]
+		if m == 2:
+			continue
+		seats.append({"fid": f["id"], "ai": m == 1, "name": f["name"]})
+	var speeds := [1.1, 0.55, 0.2, 0.0]
+	return {"seats": seats, "first_game": chk_first.button_pressed, "promo": chk_promo.button_pressed,
+		"ai_level": level, "ai_delay": speeds[speed], "reveal": chk_reveal.button_pressed}
+
+
 func _on_start() -> void:
 	var seats := []
 	for f in GameEngine.FACTIONS:
@@ -252,3 +274,238 @@ func _on_start() -> void:
 	var speeds := [1.1, 0.55, 0.2, 0.0]
 	main.start_game({"seats": seats, "first_game": chk_first.button_pressed, "promo": chk_promo.button_pressed,
 		"ai_level": level, "ai_delay": speeds[speed], "reveal": chk_reveal.button_pressed})
+
+
+
+# =================================================================== online
+
+var on_panel: Control
+var on_name: LineEdit
+var on_code: LineEdit
+var on_lbl: Label
+var on_start: Button
+
+
+func _online_panel() -> void:
+	if is_instance_valid(on_panel):
+		on_panel.queue_free()
+	on_panel = Control.new()
+	on_panel.size = Vector2(1920, 1080)
+	on_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(on_panel)
+	var shade := ColorRect.new()
+	shade.color = Color(0, 0, 0, 0.72)
+	shade.size = on_panel.size
+	on_panel.add_child(shade)
+	var box := PanelContainer.new()
+	box.add_theme_stylebox_override("panel", UI.panel_style(Color("#141414f2"), UI.YELLOW, 2, 8))
+	box.position = Vector2(560, 150)
+	box.custom_minimum_size = Vector2(800, 0)
+	on_panel.add_child(box)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 16)
+	box.add_child(vb)
+	vb.add_child(UI.title("GIOCA ONLINE", 56))
+	vb.add_child(UI.label("Chi crea la stanza sceglie nel menu fazioni e opzioni: le fazioni su UMANO diventano i posti per gli amici (la prima è la sua). Gli amici entrano con il codice. I posti rimasti liberi li gioca l'IA.", 22, Color("#cccccc")))
+	var ses: Dictionary = main.get_net().load_session()
+	on_name = _line("Il tuo nome", 20)
+	on_name.text = str(ses.get("name", ""))
+	vb.add_child(on_name)
+	var b_create := Button.new()
+	b_create.text = "CREA UNA STANZA"
+	b_create.custom_minimum_size = Vector2(0, 60)
+	b_create.add_theme_font_size_override("font_size", 28)
+	b_create.pressed.connect(_online_create)
+	vb.add_child(b_create)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	on_code = _line("Codice", 4)
+	on_code.custom_minimum_size.x = 220
+	on_code.text_changed.connect(func(t):
+		on_code.text = t.to_upper()
+		on_code.caret_column = t.length())
+	row.add_child(on_code)
+	var b_join := Button.new()
+	b_join.text = "ENTRA"
+	b_join.custom_minimum_size = Vector2(200, 60)
+	b_join.add_theme_font_size_override("font_size", 28)
+	b_join.pressed.connect(_online_join)
+	row.add_child(b_join)
+	vb.add_child(row)
+	on_lbl = UI.label("", 24, Color.WHITE)
+	on_lbl.custom_minimum_size = Vector2(760, 110)
+	on_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vb.add_child(on_lbl)
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 12)
+	on_start = _big_button("INIZIA ONLINE", 420, true)
+	on_start.pressed.connect(_online_start)
+	on_start.visible = main.lobby.get("role", "") == "host"
+	row2.add_child(on_start)
+	var b_close := _big_button("INDIETRO", 300)
+	b_close.pressed.connect(func():
+		on_panel.queue_free())
+	row2.add_child(b_close)
+	vb.add_child(row2)
+	if not main.lobby.is_empty():
+		on_code.text = main.lobby["code"]
+		on_lbl.text = "Stanza %s…" % main.lobby["code"]
+	elif str(ses.get("room", "")) != "":
+		on_code.text = str(ses["room"])
+		on_lbl.text = "Eri nella stanza %s: premi ENTRA per rientrare." % ses["room"]
+
+
+func _line(ph: String, maxlen: int) -> LineEdit:
+	var le := LineEdit.new()
+	le.placeholder_text = ph
+	le.max_length = maxlen
+	le.custom_minimum_size = Vector2(0, 60)
+	le.add_theme_font_size_override("font_size", 28)
+	return le
+
+
+func _say(t: String) -> void:
+	if is_instance_valid(on_lbl):
+		on_lbl.text = t
+
+
+func _seat_list() -> Array:
+	return _config()["seats"]
+
+
+func _seats_text(room: Dictionary) -> String:
+	var seats := Net._as_dict(room.get("seats", {}))
+	var list := _seat_list()
+	var parts := []
+	for idx in room.get("open", []):
+		var k := str(int(idx))
+		var who := str(seats[k].get("name", "?")) if seats.has(k) and seats[k] is Dictionary else "libero"
+		var fname: String = list[int(idx)]["name"] if int(idx) < list.size() else "posto %d" % (int(idx) + 1)
+		parts.append("%s: %s" % [fname, who])
+	return ", ".join(parts)
+
+
+func _online_create() -> void:
+	var nm := on_name.text.strip_edges()
+	if nm == "":
+		_say("Scrivi il tuo nome.")
+		return
+	var seats := []
+	var list := _seat_list()
+	for i in list.size():
+		if not list[i]["ai"]:
+			seats.append(i)
+	if list.size() < 2 or seats.size() < 2:
+		_say("Metti su UMANO almeno due fazioni: la prima è la tua, le altre sono i posti per gli amici.")
+		return
+	_say("Creo la stanza…")
+	var net: Net = main.get_net()
+	var code := await net.create_room(nm, seats)
+	if code == "":
+		_say("Non riesco a creare la stanza.\n%s" % net.last_error)
+		return
+	main.lobby = {"role": "host", "code": code, "seat": seats[0]}
+	net.remember_room(code, seats[0])
+	net._save({"name": nm})
+	if is_instance_valid(on_code):
+		on_code.text = code
+	if is_instance_valid(on_start):
+		on_start.visible = true
+	_lobby_poll(code)
+
+
+func _online_join() -> void:
+	var code := on_code.text.strip_edges().to_upper()
+	var nm := on_name.text.strip_edges()
+	if nm == "" or code.length() != 4:
+		_say("Scrivi il tuo nome e il codice di 4 lettere.")
+		return
+	_say("Entro nella stanza %s…" % code)
+	var net: Net = main.get_net()
+	var seat := await net.join_room(code, nm)
+	if seat == -2:
+		_say("Stanza %s non trovata, oppure la partita è già iniziata.%s" % [code, ("\n" + net.last_error) if net.last_error != "" else ""])
+		return
+	if seat == -1:
+		_say("Nella stanza %s non ci sono posti liberi." % code)
+		return
+	var room: Dictionary = net.last_room
+	main.lobby = {"role": "host" if room.get("host", "") == net.uid else "guest", "code": code, "seat": seat}
+	net.remember_room(code, seat)
+	net._save({"name": nm})
+	if room.get("status", "") in ["playing", "over"] and room.has("game"):
+		_say("Rientro nella partita della stanza %s…" % code)
+		_begin(room["game"], true)
+		return
+	if is_instance_valid(on_start):
+		on_start.visible = main.lobby["role"] == "host"
+	_lobby_poll(code)
+
+
+func _lobby_poll(code: String) -> void:
+	var net: Net = main.get_net()
+	while is_inside_tree() and main.lobby.get("code", "") == code:
+		var room := await net.room(code)
+		if not is_inside_tree() or main.lobby.get("code", "") != code:
+			return
+		if room.is_empty():
+			_say("La stanza %s non esiste più." % code)
+			main.lobby = {}
+			return
+		if main.lobby["role"] == "host":
+			_say("Stanza [ %s ]: dai il codice ai tuoi amici.\nPosti: %s.\nQuando ci siete tutti premi INIZIA ONLINE: i posti liberi li gioca l'IA." % [code, _seats_text(room)])
+		else:
+			if room.get("status", "") == "playing" and room.has("game"):
+				_begin(room["game"], false)
+				return
+			_say("Sei nella stanza [ %s ] (posto %d).\nPosti: %s.\nAspetta che chi l'ha creata avvii la partita." % [code, int(main.lobby["seat"]) + 1, _seats_text(room)])
+		await get_tree().create_timer(2.0).timeout
+
+
+## Chi ha creato la stanza avvia: fazioni, opzioni e seme valgono per tutti.
+func _online_start() -> void:
+	var code: String = main.lobby["code"]
+	var net: Net = main.get_net()
+	var room := await net.room(code)
+	if room.is_empty():
+		_say("La stanza %s non esiste più." % code)
+		main.lobby = {}
+		return
+	var seats_db := Net._as_dict(room.get("seats", {}))
+	var cfg := _config()
+	var my_seat := int(main.lobby["seat"])
+	if my_seat >= cfg["seats"].size() or not seats_db.has(str(my_seat)) or cfg["seats"][my_seat]["ai"]:
+		_say("Hai cambiato le fazioni dopo aver creato la stanza: creane una nuova.")
+		return
+	for i in cfg["seats"].size():
+		var k := str(i)
+		if seats_db.has(k) and seats_db[k] is Dictionary and not cfg["seats"][i]["ai"]:
+			cfg["seats"][i]["name"] = "%s (%s)" % [str(seats_db[k].get("name", "")), cfg["seats"][i]["name"]]
+		else:
+			cfg["seats"][i]["ai"] = true
+	cfg["seed"] = 1 + randi() % 2000000000
+	cfg["reveal"] = false
+	var g := {"cfg": var_to_str(cfg)}
+	if not await net.start_room(code, g):
+		_say("Non riesco ad avviare la partita (%s)." % net.last_error)
+		return
+	_begin(g, false)
+
+
+## Avvio (o rientro) della partita online.
+func _begin(g: Dictionary, rejoin: bool) -> void:
+	var net: Net = main.get_net()
+	var lob: Dictionary = main.lobby
+	var backlog: Array = []
+	if rejoin:
+		backlog = await net.get_acts(lob["code"])
+		net.set_away(lob["code"], int(lob["seat"]), false)
+	var cfg = str_to_var(str(g.get("cfg", "")))
+	if not (cfg is Dictionary):
+		_say("Configurazione della partita non valida.")
+		return
+	var ses := OnlineSession.new()
+	ses.setup(net, lob["code"], int(lob["seat"]), lob["role"], backlog)
+	cfg["online"] = ses
+	main.lobby = {}
+	main.start_game(cfg)

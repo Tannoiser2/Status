@@ -56,6 +56,8 @@ var last_coin := ""
 var running := false
 var abort := false
 var pause_enabled := false
+## Partita online (OnlineSession): le decisioni passano dal registro di mosse nel database.
+var online = null
 
 
 # ------------------------------------------------------------------ setup
@@ -369,6 +371,8 @@ func decide(seat: int, req: Dictionary):
 	req["seat"] = seat
 	if abort:
 		return ai.decide(self, seat, req)
+	if online != null:
+		return await online.decide(self, seat, req)
 	if players[seat]["ai"]:
 		if ai_delay > 0.0 and not headless and is_inside_tree():
 			await get_tree().create_timer(ai_delay).timeout
@@ -379,7 +383,7 @@ func decide(seat: int, req: Dictionary):
 
 
 func pause_point(text: String) -> void:
-	if pause_enabled and not abort:
+	if pause_enabled and not abort and (online == null or not online.catchup):
 		pause_requested.emit(text)
 		await decision_provided
 
