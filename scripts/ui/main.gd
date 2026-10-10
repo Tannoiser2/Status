@@ -1,0 +1,59 @@
+extends Control
+## Radice dell'applicazione: alterna menu e partita.
+
+var current: Control
+
+
+func _ready() -> void:
+	theme = UI.make_theme()
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+	show_menu()
+
+
+func _unhandled_input(ev: InputEvent) -> void:
+	if ev is InputEventKey and ev.pressed and ev.keycode == KEY_F11:
+		if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		else:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+
+func _clear() -> void:
+	if current != null:
+		current.queue_free()
+		current = null
+
+
+func show_menu() -> void:
+	_clear()
+	var m := preload("res://scripts/ui/menu.gd").new()
+	m.main = self
+	add_child(m)
+	current = m
+
+
+func start_game(config: Dictionary) -> void:
+	_clear()
+	var g := preload("res://scripts/ui/game_view.gd").new()
+	g.main = self
+	g.config = config
+	add_child(g)
+	current = g
+
+
+func show_rules() -> void:
+	_clear()
+	var t := preload("res://scripts/ui/tutorial_slides.gd").new()
+	t.main = self
+	t.mode = "rules"
+	add_child(t)
+	current = t
+
+
+func start_tutorial() -> void:
+	_clear()
+	var t := preload("res://scripts/ui/tutorial_slides.gd").new()
+	t.main = self
+	t.mode = "tutorial"
+	add_child(t)
+	current = t

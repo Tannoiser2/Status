@@ -1,0 +1,15 @@
+.godot/
+*.import
+.DS_Store
+build/
+*.exe
+*.pck
+*.wasm
+*.zip
+*.app/
+STATUS.html
+STATUS.js
+STATUS.*.js
+STATUS.png
+STATUS.icon.png
+STATUS.apple-touch-icon.png
